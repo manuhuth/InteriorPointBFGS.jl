@@ -1,0 +1,26 @@
+name = "InteriorPointBFGS"
+uuid = "7f1de7af-59b0-40d4-accf-f5bd7649220f"
+authors = ["Manuel Huth <manuel.huth@uni-bonn.de>"]
+version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OptimizationBase = "bca83a33-5cc9-4baa-983d-23429ab6bcbb"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+
+[compat]
+ForwardDiff = "0.10, 1"
+LinearAlgebra = "1"
+Optimization = "5"
+OptimizationBase = "5.1"
+SciMLBase = "2.122, 3"
+Test = "1"
+julia = "1.10"
+
+[extras]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+Optimization = "7f7a1694-90dd-40f0-9382-eb1efda571ba"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["ForwardDiff", "Optimization", "Test"]
