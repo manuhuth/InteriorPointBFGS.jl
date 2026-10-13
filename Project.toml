@@ -1,7 +1,7 @@
 name = "InteriorPointBFGS"
 uuid = "7f1de7af-59b0-40d4-accf-f5bd7649220f"
 authors = ["Manuel Huth <manuel.huth@uni-bonn.de>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
