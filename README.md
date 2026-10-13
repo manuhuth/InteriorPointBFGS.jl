@@ -32,7 +32,7 @@ r.x       # [0.8, 0.64]
 r.status  # :first_order
 ```
 
-The result is a named tuple with fields `x`, `f`, `g`, `iterations`, `fevals`, `status`, `zl` and `zu`. The vectors `zl` and `zu` hold the multipliers of the lower and upper bounds. The status is one of `:first_order`, `:step`, `:maxiters`, `:maxfevals`, `:maxtime` and `:callback`. The callback is called once per iteration with a named tuple `(; iter, fevals, x, f, g, optimality, μ, Δ, tr_step)` and stops the run when it returns `true`.
+The result is a named tuple with fields `x`, `f`, `g`, `iterations`, `fevals`, `status`, `zl` and `zu`. The vectors `zl` and `zu` hold the multipliers of the lower and upper bounds. The status is one of `:first_order`, `:step`, `:maxiters`, `:maxfevals`, `:maxtime` and `:callback`. The callback is called once per iteration with a named tuple `(; iter, fevals, x, f, g, optimality, μ, Δ, tr_step)` and stops the run when it returns `true`. It returns `:refresh` when the objective has changed at the current point, for example after an inner problem of the objective was re-solved. The method then evaluates `fg(x)` once more and continues with the new value and gradient, keeping the BFGS matrix, the multipliers, μ and Δ.
 
 ### Optimization.jl
 
@@ -45,7 +45,7 @@ prob = OptimizationProblem(optf, [-1.2, 1.0], [1.0, 100.0]; lb = [-2.0, -2.0], u
 sol = solve(prob, IPBFGS(); maxiters = 500)
 ```
 
-The method needs gradients, either from an AD backend or from a `grad` function in `OptimizationFunction`. Missing `lb` or `ub` are treated as infinite bounds. `MaxSense` problems are solved by negating the objective. The common arguments `maxiters`, `maxtime` and `callback` are supported, and `maxiters` overrides the field of `IPBFGS`. The tolerances are fields of `IPBFGS`, and the common arguments `abstol` and `reltol` are ignored. The return codes are `Success` for `:first_order` and `:step`, `MaxIters` for `:maxiters` and `:maxfevals`, `MaxTime` for `:maxtime` and `Terminated` for `:callback`. The result tuple of `ipbfgs` is stored in `sol.original`.
+The method needs gradients, either from an AD backend or from a `grad` function in `OptimizationFunction`. Missing `lb` or `ub` are treated as infinite bounds. `MaxSense` problems are solved by negating the objective. The common arguments `maxiters`, `maxtime` and `callback` are supported (the callback returns a boolean or `:refresh`), and `maxiters` overrides the field of `IPBFGS`. The tolerances are fields of `IPBFGS`, and the common arguments `abstol` and `reltol` are ignored. The return codes are `Success` for `:first_order` and `:step`, `MaxIters` for `:maxiters` and `:maxfevals`, `MaxTime` for `:maxtime` and `Terminated` for `:callback`. The result tuple of `ipbfgs` is stored in `sol.original`.
 
 ## Options
 
