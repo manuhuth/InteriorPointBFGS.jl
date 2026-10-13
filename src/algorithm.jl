@@ -130,7 +130,11 @@ complementarity(s, z, h) = maximum((min(s[i] * z[i], s[i], z[i]) for i in eachin
 Minimize f over lb ≤ x ≤ ub, where `fg(x)` returns `(f, ∇f)`, from `x0` strictly inside the
 bounds. Bounds may be infinite. A non-finite f rejects the trial point. `callback(state)` is
 called once per iteration with `state = (; iter, fevals, x, f, g, optimality, μ, Δ, tr_step)`
-and stops the run when it returns `true`.
+and stops the run when it returns `true`; `false` or `nothing` continue. Returning `:refresh`
+tells the method that the objective has changed at the current `x` (for example an inner
+problem of the objective was re-solved): `fg(x)` is evaluated once more, counted in `fevals`,
+and the iteration continues with the new value and gradient. The BFGS matrix, the multipliers,
+μ and Δ are kept.
 
 Returns `(; x, f, g, iterations, fevals, status, zl, zu)` with `status` one of
 `:first_order`, `:step`, `:maxiters`, `:maxfevals`, `:maxtime`, `:callback`.
@@ -160,10 +164,21 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
         gL = g .- zl .+ zu
         sc = max(1, norm(g, Inf))
         opt = max(norm(gL, Inf), complementarity(sl, zl, hl), complementarity(su, zu, hu))
-        if callback !== nothing &&
-                callback((; iter = it, fevals = nf, x, f, g, optimality = opt, μ, Δ, tr_step)) === true
-            status = :callback
-            break
+        if callback !== nothing
+            cb = callback((; iter = it, fevals = nf, x, f, g, optimality = opt, μ, Δ, tr_step))
+            if cb === true
+                status = :callback
+                break
+            elseif cb === :refresh                   # the objective changed at x
+                f, g = fg(x)
+                nf += 1
+                isfinite(f) || throw(ArgumentError("the objective is not finite at x after a callback refresh."))
+                gL = g .- zl .+ zu
+                sc = max(1, norm(g, Inf))
+                opt = max(norm(gL, Inf), complementarity(sl, zl, hl), complementarity(su, zu, hu))
+            elseif !(cb === false || cb === nothing)
+                throw(ArgumentError("the callback must return true, false, nothing or :refresh; got $(repr(cb))."))
+            end
         end
         opt <= o.tolfun * sc && (status = :first_order; break)
         it >= o.maxiters && (status = :maxiters; break)

@@ -1,5 +1,7 @@
 # Optimization.jl interface: solve(prob, IPBFGS(); maxiters, maxtime, callback).
 # Missing bounds are infinite. Tolerances are fields of IPBFGS; abstol and reltol are ignored.
+# The callback returns a Bool (halt), or :refresh when the objective changed at the current
+# point (see `ipbfgs`).
 
 SciMLBase.has_init(::IPBFGS) = true
 SciMLBase.allowsbounds(::IPBFGS) = true
@@ -50,8 +52,8 @@ function SciMLBase.__solve(cache::OptimizationBase.OptimizationCache{IPBFGS})
             iter = s.iter, u = s.x, objective = sgn * s.f, grad = sgn .* s.g, original = s, p = cache.p
         )
         halt = cache.callback(state, sgn * s.f)
-        halt isa Bool ||
-            error("The callback should return a boolean `halt` for whether to stop the optimization process.")
+        (halt isa Bool || halt === :refresh) ||
+            error("The callback should return a boolean `halt` for whether to stop the optimization process, or `:refresh` when the objective changed at the current point.")
         return halt
     end
     n = length(cache.u0)
