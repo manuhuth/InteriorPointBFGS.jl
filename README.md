@@ -32,7 +32,7 @@ r.x       # [0.8, 0.64]
 r.status  # :first_order
 ```
 
-The result is a named tuple with fields `x`, `f`, `g`, `iterations`, `fevals`, `status`, `zl` and `zu`. The vectors `zl` and `zu` hold the multipliers of the lower and upper bounds. The status is one of `:first_order`, `:step`, `:maxiters`, `:maxfevals`, `:maxtime` and `:callback`. The callback is called once per iteration with a named tuple `(; iter, fevals, x, f, g, optimality, μ, Δ, tr_step)` and stops the run when it returns `true`. It returns `:refresh` when the objective has changed at the current point, for example after an inner problem of the objective was re-solved. The method then evaluates `fg(x)` once more and continues with the new value and gradient, keeping the BFGS matrix, the multipliers, μ and Δ.
+The result is a named tuple with fields `x`, `f`, `g`, `iterations`, `fevals`, `gevals` (gradient evaluations; fewer than `fevals` when value-only `fonly` and gradient-only `gonly` functions are passed, which the Optimization.jl interface does), `status`, `zl` and `zu`. The vectors `zl` and `zu` hold the multipliers of the lower and upper bounds. The status is one of `:first_order`, `:step`, `:maxiters`, `:maxfevals`, `:maxtime` and `:callback`. The callback is called once per iteration with a named tuple `(; iter, fevals, x, f, g, optimality, μ, Δ, tr_step)` and stops the run when it returns `true`. It returns `:refresh` when the objective has changed at the current point, for example after an inner problem of the objective was re-solved. The method then evaluates `fg(x)` once more and continues with the new value and gradient, keeping the BFGS matrix, the multipliers, μ and Δ.
 
 ### Optimization.jl
 
