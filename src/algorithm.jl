@@ -49,9 +49,9 @@ Keyword arguments (defaults in parentheses):
 - `tolx` (1e-10): step tolerance, maxᵢ |Δxᵢ|/max(1, |xᵢ|).
 - `maxiters` (1000): maximum number of iterations.
 - `maxfevals` (35000): maximum number of objective evaluations.
-- `scale_init` (true): before the first BFGS update, rescale the initial identity to
-  B₀ = (yᵀy / sᵀy) I (Shanno and Phua 1978; Nocedal and Wright, eq. 6.20), so the curvature
-  matches the problem's scale instead of assuming unit curvature.
+- `scale_init` (true): cap the first step at ‖Δx‖∞ ≤ 1 (no curvature is known yet) and, before
+  the first BFGS update, rescale the initial identity to B₀ = (yᵀy / sᵀy) I (Shanno and Phua
+  1978; Nocedal and Wright, eq. 6.20), so the curvature matches the problem's scale.
 """
 Base.@kwdef struct IPBFGS
     μ0::Float64 = 0.1
@@ -200,6 +200,13 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
         q = g .- μ ./ sl .+ μ ./ su
         M = B + Diagonal(Σ)
         dx = -(Symmetric(M) \ q)                      # Bunch-Kaufman LDLᵀ
+        # First iteration: B is the unscaled identity, so dx ≈ -∇f has the gradient's
+        # scale, which can throw x far into regions where f is expensive or undefined.
+        # Cap it at ‖dx‖∞ ≤ 1 until curvature is known (cf. Nocedal & Wright §3.5).
+        if o.scale_init && it == 1
+            mx = maximum(abs, dx)
+            mx > 1 && (dx ./= mx)
+        end
         dzl = μ ./ sl .- zl .- zl ./ sl .* dx
         dzu = μ ./ su .- zu .+ zu ./ su .* dx
         αx = min(ftb(sl, dx, o.τ), ftb(su, -dx, o.τ))
