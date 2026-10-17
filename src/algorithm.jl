@@ -49,7 +49,8 @@ Keyword arguments (defaults in parentheses):
 - `tolx` (1e-10): step tolerance, maxᵢ |Δxᵢ|/max(1, |xᵢ|).
 - `maxiters` (1000): maximum number of iterations.
 - `maxfevals` (35000): maximum number of objective evaluations.
-- `scale_init` (true): cap the first step at ‖Δx‖∞ ≤ 1 (no curvature is known yet) and, before
+- `scale_init` (true): on unbounded problems cap the first step at ‖Δx‖∞ ≤ 1 (no curvature is
+  known yet) and, before
   the first BFGS update, rescale the initial identity to B₀ = (yᵀy / sᵀy) I (Shanno and Phua
   1978; Nocedal and Wright, eq. 6.20), so the curvature matches the problem's scale.
 """
@@ -200,10 +201,11 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
         q = g .- μ ./ sl .+ μ ./ su
         M = B + Diagonal(Σ)
         dx = -(Symmetric(M) \ q)                      # Bunch-Kaufman LDLᵀ
-        # First iteration: B is the unscaled identity, so dx ≈ -∇f has the gradient's
-        # scale, which can throw x far into regions where f is expensive or undefined.
-        # Cap it at ‖dx‖∞ ≤ 1 until curvature is known (cf. Nocedal & Wright §3.5).
-        if o.scale_init && it == 1
+        # First iteration of an unbounded problem: B is the unscaled identity, so dx ≈ -∇f
+        # has the gradient's scale, which can throw x far into regions where f is expensive
+        # or undefined. Cap it at ‖dx‖∞ ≤ 1 until curvature is known (cf. Nocedal & Wright
+        # §3.5). With finite bounds the fraction-to-the-boundary rule already limits it.
+        if o.scale_init && it == 1 && !any(hl) && !any(hu)
             mx = maximum(abs, dx)
             mx > 1 && (dx ./= mx)
         end
