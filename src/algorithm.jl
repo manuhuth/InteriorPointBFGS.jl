@@ -49,6 +49,9 @@ Keyword arguments (defaults in parentheses):
 - `tolx` (1e-10): step tolerance, maxᵢ |Δxᵢ|/max(1, |xᵢ|).
 - `maxiters` (1000): maximum number of iterations.
 - `maxfevals` (35000): maximum number of objective evaluations.
+- `scale_init` (true): before the first BFGS update, rescale the initial identity to
+  B₀ = (yᵀy / sᵀy) I (Shanno and Phua 1978; Nocedal and Wright, eq. 6.20), so the curvature
+  matches the problem's scale instead of assuming unit curvature.
 """
 Base.@kwdef struct IPBFGS
     μ0::Float64 = 0.1
@@ -61,6 +64,7 @@ Base.@kwdef struct IPBFGS
     tolx::Float64 = 1.0e-10
     maxiters::Int = 1000
     maxfevals::Int = 35000
+    scale_init::Bool = true
 end
 
 # Least-squares bound multipliers, one 2×2 system per component (fewer for infinite bounds).
@@ -256,6 +260,9 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
             zu .= ifelse.(zu .<= 0, μ ./ sun, zu)
         end
         y = gn .- g
+        if o.scale_init && it == 1 && dot(s, y) > eps() && dot(y, y) > 0
+            B .= (dot(y, y) / dot(s, y)) .* Matrix{Float64}(I, n, n)
+        end
         Bs = B * s
         sBs = dot(s, Bs)
         sy = dot(s, y)
