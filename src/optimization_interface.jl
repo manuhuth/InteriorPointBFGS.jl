@@ -47,6 +47,12 @@ function SciMLBase.__solve(cache::OptimizationBase.OptimizationCache{IPBFGS})
         end
         return sgn * first(f), sgn .* G
     end
+    fonly(x) = sgn * first(cache.f.f(x, cache.p))
+    function gonly(x)
+        G = similar(x)
+        cache.f.grad(G, x)
+        return sgn .* G
+    end
     callback = cache.callback === OptimizationBase.DEFAULT_CALLBACK ? nothing : function (s)
         state = OptimizationBase.OptimizationState(;
             iter = s.iter, u = s.x, objective = sgn * s.f, grad = sgn .* s.g, original = s, p = cache.p
@@ -64,9 +70,11 @@ function SciMLBase.__solve(cache::OptimizationBase.OptimizationCache{IPBFGS})
         IPBFGS(; (; (k => getfield(cache.opt, k) for k in fieldnames(IPBFGS))..., maxiters)...)
     maxtime = cache.solver_args.maxtime === nothing ? Inf : cache.solver_args.maxtime
     t0 = time()
-    r = ipbfgs(fg, cache.u0, lb, ub, alg; callback, maxtime)
+    r = ipbfgs(fg, cache.u0, lb, ub, alg; callback, maxtime,
+        fonly = cache.f.grad === nothing ? nothing : fonly,
+        gonly = cache.f.grad === nothing ? nothing : gonly)
     stats = OptimizationBase.OptimizationStats(;
-        iterations = r.iterations, time = time() - t0, fevals = r.fevals, gevals = r.fevals
+        iterations = r.iterations, time = time() - t0, fevals = r.fevals, gevals = r.gevals
     )
     return SciMLBase.build_solution(
         cache, cache.opt, r.x, sgn * r.f; original = r, retcode = _RETCODES[r.status], stats

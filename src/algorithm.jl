@@ -49,6 +49,14 @@ Keyword arguments (defaults in parentheses):
 - `tolx` (1e-10): step tolerance, maxᵢ |Δxᵢ|/max(1, |xᵢ|).
 - `maxiters` (1000): maximum number of iterations.
 - `maxfevals` (35000): maximum number of objective evaluations.
+- `lazy_gradient` (true): when `ipbfgs` also gets value-only and gradient-only functions
+  (`fonly`, `gonly`; the Optimization.jl interface passes them), trial points of the line
+  search and the trust region are evaluated with `fonly` and the gradient is computed only at
+  the accepted point - rejected trials then cost no gradient.
+- `scale_init` (true): on unbounded problems cap the first step at ‖Δx‖∞ ≤ 1 (no curvature is
+  known yet) and, before
+  the first BFGS update, rescale the initial identity to B₀ = (yᵀy / sᵀy) I (Shanno and Phua
+  1978; Nocedal and Wright, eq. 6.20), so the curvature matches the problem's scale.
 """
 Base.@kwdef struct IPBFGS
     μ0::Float64 = 0.1
@@ -61,6 +69,8 @@ Base.@kwdef struct IPBFGS
     tolx::Float64 = 1.0e-10
     maxiters::Int = 1000
     maxfevals::Int = 35000
+    scale_init::Bool = true
+    lazy_gradient::Bool = true
 end
 
 # Least-squares bound multipliers, one 2×2 system per component (fewer for infinite bounds).
@@ -139,7 +149,8 @@ and the iteration continues with the new value and gradient. The BFGS matrix, th
 Returns `(; x, f, g, iterations, fevals, status, zl, zu)` with `status` one of
 `:first_order`, `:step`, `:maxiters`, `:maxfevals`, `:maxtime`, `:callback`.
 """
-function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxtime = Inf)
+function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxtime = Inf,
+        fonly = nothing, gonly = nothing)
     o = alg
     n = length(x0)
     length(lb) == n && length(ub) == n || throw(DimensionMismatch("x0, lb and ub must have the same length."))
@@ -150,6 +161,9 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
     nf = 0
     f, g = fg(x)
     nf += 1
+    ng = 1
+    lazy = o.lazy_gradient && fonly !== nothing && gonly !== nothing
+    trial(xv) = lazy ? (fonly(xv), nothing) : fg(xv)   # value (and gradient unless lazy)
     isfinite(f) || throw(ArgumentError("the objective is not finite at x0."))
     μ, Δ = o.μ0, sqrt(n)
     B = Matrix{Float64}(I, n, n)
@@ -196,6 +210,14 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
         q = g .- μ ./ sl .+ μ ./ su
         M = B + Diagonal(Σ)
         dx = -(Symmetric(M) \ q)                      # Bunch-Kaufman LDLᵀ
+        # First iteration of an unbounded problem: B is the unscaled identity, so dx ≈ -∇f
+        # has the gradient's scale, which can throw x far into regions where f is expensive
+        # or undefined. Cap it at ‖dx‖∞ ≤ 1 until curvature is known (cf. Nocedal & Wright
+        # §3.5). With finite bounds the fraction-to-the-boundary rule already limits it.
+        if o.scale_init && it == 1 && !any(hl) && !any(hu)
+            mx = maximum(abs, dx)
+            mx > 1 && (dx ./= mx)
+        end
         dzl = μ ./ sl .- zl .- zl ./ sl .* dx
         dzu = μ ./ su .- zu .+ zu ./ su .* dx
         αx = min(ftb(sl, dx, o.τ), ftb(su, -dx, o.τ))
@@ -210,7 +232,7 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
         if direct
             for bt in 0:o.maxbt
                 xn = x .+ (t * αx) .* dx
-                fn, gn = fg(xn)
+                fn, gn = trial(xn)
                 nf += 1
                 φ(fn, xn) <= φ0 + o.armijo * t * αx * Dφ && break      # false for NaN/Inf
                 nf >= o.maxfevals && (stop = true; status = :maxfevals; break)
@@ -224,7 +246,7 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
                 p = steihaug(M, q, D2, Δ)
                 p .*= min(ftb(sl, p, o.τ), ftb(su, -p, o.τ))
                 xn = x .+ p
-                fn, gn = fg(xn)
+                fn, gn = trial(xn)
                 nf += 1
                 ρ = (φ0 - φ(fn, xn)) / -(dot(q, p) + dot(p, M * p) / 2)
                 if ρ > o.ηtr
@@ -242,6 +264,10 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
             end
         end
         stop && break
+        if gn === nothing                            # lazy: gradient at the accepted point
+            gn = gonly(xn)
+            ng += 1
+        end
         s = xn .- x
         tr_step = !direct
         direct && (Δ = 2normD(s))
@@ -256,6 +282,9 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
             zu .= ifelse.(zu .<= 0, μ ./ sun, zu)
         end
         y = gn .- g
+        if o.scale_init && it == 1 && dot(s, y) > eps() && dot(y, y) > 0
+            B .= (dot(y, y) / dot(s, y)) .* Matrix{Float64}(I, n, n)
+        end
         Bs = B * s
         sBs = dot(s, Bs)
         sy = dot(s, y)
@@ -270,5 +299,5 @@ function ipbfgs(fg, x0, lb, ub, alg::IPBFGS = IPBFGS(); callback = nothing, maxt
         sl, su = x .- lb, ub .- x
         tolstop && (status = :step; break)
     end
-    return (; x, f, g, iterations = it, fevals = nf, status, zl, zu)
+    return (; x, f, g, iterations = it, fevals = nf, gevals = lazy ? ng : nf, status, zl, zu)
 end
